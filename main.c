@@ -30,9 +30,14 @@ static int curr_light = GREEN;
 static int light_counter = 0;
 static int traffic_counter = 0;
 static int pedes_counter = 0;
+static int wait_counter = 0;
 
 static bool pedes_request = false;
 static bool blue_light =  false;
+static bool train_cleared = false;
+
+float dutycycle = 0;
+float voltage = 0;
 
 static int state;
 
@@ -52,7 +57,6 @@ static void change_state(int local_state){
 			printf("Entering MAINTENANCE MODE\n\r");
 			fflush(stdout);
 			led_set(ALL, false, 0);
-			servo_set(HIGH); // Blocks traffic
 			state = MAINTENANCE;
 			break;
 	}
@@ -72,9 +76,26 @@ void sw_callback(u32 sw_num){
 		if (state == MAINTENANCE){
 			printf("Exiting MAINTENANCE MODE\n\r");
 			fflush(stdout);
-			servo_set(LOW); // Allows traffic
 			change_state(TRAFFIC);
-		} else change_state(MAINTENANCE);
+		} else {
+			change_state(MAINTENANCE);
+		}
+	} else if (sw_num == 1){
+		if (state == TRAIN){
+			printf("Train Clear\n\r");
+			fflush(stdout);
+			// Wait the 10 seconds to protect humans I guess
+			train_cleared = true;
+		} else {
+			printf("Train Arriving\n\r");
+			fflush(stdout);
+			servo_set(HIGH);
+			printf("GATE STATUS: Closed\n\r");
+			fflush(stdout);
+			led_set(ALL, true, 0);
+			led_set(RGBLED, false, 0);
+			change_state(TRAIN);
+		}
 	}
 }
 
@@ -101,6 +122,7 @@ void ttc_callback(void){
 				change_state(PEDESTRIAN);
 				pedes_request = false;
 			}
+
 			break;
 		case PEDESTRIAN:
 			if (pedes_counter == 10){
@@ -110,6 +132,16 @@ void ttc_callback(void){
 			} else pedes_counter++;
 			break;
 		case TRAIN:
+			if (train_cleared == true){
+				if (wait_counter == 10){
+					train_cleared = false;
+					servo_set(LOW);
+					printf("GATE STATUS: Open\n\r");
+					fflush(stdout);
+					led_set(ALL, false, 0);
+					change_state(TRAFFIC);
+				} else wait_counter++;
+			}
 
 			break;
 		case MAINTENANCE:
@@ -119,6 +151,19 @@ void ttc_callback(void){
 			} else {
 				led_set(RGBLED, false, 0);
 				blue_light = false;
+			}
+
+			voltage = adc_get_pot();
+			dutycycle = (voltage * 4.5) + 4.25;
+
+			if (dutycycle <= (LOW + 0.01)){
+				servo_set(LOW);
+				printf("GATE STATUS: Open\n\r");
+				fflush(stdout);
+			} else if (dutycycle >= HIGH){
+				servo_set(HIGH);
+				printf("GATE STATUS: Closed\n\r");
+				fflush(stdout);
 			}
 
 			break;

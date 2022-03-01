@@ -44,7 +44,7 @@ void servo_init(void){
  */
 void servo_set(double dutycycle){
 
-	if ((dutycycle <= 8.76) && (dutycycle >= 4.25)){
+	if ((dutycycle <= 8.78) && (dutycycle >= 4.24)){
 		resetValue_1 = (dutycycle/100)* resetValue_0; // Our goal is to find
 
 		XTmrCtr_Stop(&TmrCtr, XTC_TIMER_0);
