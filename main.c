@@ -11,6 +11,10 @@
 #include "adc.h"
 #include <stdbool.h>
 
+#define LOW 4.25 //open
+#define HIGH 8.75 // closed
+
+
 #define TRAFFIC 0
 #define PEDESTRIAN 1
 #define TRAIN 2
@@ -19,15 +23,16 @@
 #define RED 4
 #define GREEN 2
 #define YELLOW 6
+#define BLUE 1
 #define RGBLED 6
 
-static int curr_light = RED;
+static int curr_light = GREEN;
 static int light_counter = 0;
 static int traffic_counter = 0;
 static int pedes_counter = 0;
 
 static bool pedes_request = false;
-
+static bool blue_light =  false;
 
 static int state;
 
@@ -44,6 +49,10 @@ static void change_state(int local_state){
 			state = TRAIN;
 			break;
 		case MAINTENANCE:
+			printf("Entering MAINTENANCE MODE\n\r");
+			fflush(stdout);
+			led_set(ALL, false, 0);
+			servo_set(HIGH); // Blocks traffic
 			state = MAINTENANCE;
 			break;
 	}
@@ -58,7 +67,15 @@ void btn_callback(u32 btn_num){
 	}
 }
 
-void sw_callback(u32 led_num){
+void sw_callback(u32 sw_num){
+	if (sw_num == 0){
+		if (state == MAINTENANCE){
+			printf("Exiting MAINTENANCE MODE\n\r");
+			fflush(stdout);
+			servo_set(LOW); // Allows traffic
+			change_state(TRAFFIC);
+		} else change_state(MAINTENANCE);
+	}
 }
 
 void ttc_callback(void){
@@ -96,6 +113,13 @@ void ttc_callback(void){
 
 			break;
 		case MAINTENANCE:
+			if (blue_light == false){
+				led_set(RGBLED, true, BLUE);
+				blue_light = true;
+			} else {
+				led_set(RGBLED, false, 0);
+				blue_light = false;
+			}
 
 			break;
 	}
@@ -121,9 +145,13 @@ int main()
 		fflush(stdout);
 		return 3;
 	}
+	printf("Hello\n\r");
+	fflush(stdout);
+
 
 	ttc_start();
 	change_state(TRAFFIC);
+	servo_set(LOW); // Blocks traffic
 
 	while (1){
 	}
