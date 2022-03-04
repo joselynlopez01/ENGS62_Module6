@@ -25,8 +25,11 @@
 #define YELLOW 6
 #define BLUE 1
 #define RGBLED 6
+#define YELLOW2GREEN 7
+#define YELLOW2RED 8
 
-static int curr_light = GREEN;
+
+static int curr_light = RED;
 static int light_counter = 0;
 static int traffic_counter = 0;
 static int pedes_counter = 0;
@@ -35,6 +38,9 @@ static int wait_counter = 0;
 static bool pedes_request = false;
 static bool blue_light =  false;
 static bool train_cleared = false;
+static bool train_coming = false;
+
+static bool gate_open;
 
 float dutycycle = 0;
 float voltage = 0;
@@ -51,6 +57,7 @@ static void change_state(int local_state){
 			state = PEDESTRIAN;
 			break;
 		case TRAIN:
+			led_set(RGBLED, true, RED);
 			state = TRAIN;
 			break;
 		case MAINTENANCE:
@@ -76,24 +83,58 @@ void sw_callback(u32 sw_num){
 		if (state == MAINTENANCE){
 			printf("Exiting MAINTENANCE MODE\n\r");
 			fflush(stdout);
-			change_state(TRAFFIC);
+			printf("train_coming: %d, train_cleared: %d\n\r", train_coming, train_cleared);
+			fflush(stdout);
+			if(train_cleared == false && train_coming == false){
+				servo_set(LOW);
+				gate_open = true;
+				printf("GATE STATUS: Open\n\r");
+				fflush(stdout);
+				change_state(TRAFFIC);
+			} else if (train_cleared == true){
+				led_set(RGBLED, false, 0);
+				blue_light = false;
+				led_set(ALL, true, 0);
+				servo_set(HIGH);
+				gate_open = false;
+				change_state(TRAIN);
+			}
 		} else {
 			change_state(MAINTENANCE);
 		}
 	} else if (sw_num == 1){
-		if (state == TRAIN){
+		if (state == MAINTENANCE){
+			//printf("Train coming: %d, Train cleared: %d \n\r ", train_coming, train_cleared);
+			if ((train_coming == false) && (train_cleared == false)){
+				printf("Train Arriving\n\r");
+				fflush(stdout);
+				train_coming = true;
+				train_cleared = false;
+				change_state(MAINTENANCE);
+			} else if ((train_coming == true) && (train_cleared == false)){
+				printf("Train Clear\n\r");
+				fflush(stdout);
+				// Wait the 10 seconds to protect humans I guess
+				train_cleared = true;
+				train_coming = false;
+			}
+		} else if (train_coming == true && train_cleared == false){
 			printf("Train Clear\n\r");
 			fflush(stdout);
 			// Wait the 10 seconds to protect humans I guess
 			train_cleared = true;
+			train_coming =  false;
 		} else {
 			printf("Train Arriving\n\r");
+			train_coming = true;
 			fflush(stdout);
 			servo_set(HIGH);
+			gate_open = false;
 			printf("GATE STATUS: Closed\n\r");
 			fflush(stdout);
 			led_set(ALL, true, 0);
 			led_set(RGBLED, false, 0);
+			train_cleared = false;
 			change_state(TRAIN);
 		}
 	}
@@ -105,12 +146,15 @@ void ttc_callback(void){
 			traffic_counter++;
 			if(light_counter == 3){
 				if (curr_light == RED){
+					led_set(RGBLED, true, YELLOW);
+					curr_light = YELLOW2GREEN;
+				} else if (curr_light == YELLOW2GREEN){
 					led_set(RGBLED, true, GREEN);
 					curr_light = GREEN;
 				} else if (curr_light == GREEN){
 					led_set(RGBLED, true, YELLOW);
-					curr_light = YELLOW;
-				} else if (curr_light == YELLOW){
+					curr_light = YELLOW2RED;
+				} else if (curr_light == YELLOW2RED){
 					led_set(RGBLED, true, RED);
 					curr_light = RED;
 				}
@@ -134,8 +178,10 @@ void ttc_callback(void){
 		case TRAIN:
 			if (train_cleared == true){
 				if (wait_counter == 10){
+					wait_counter = 0;
 					train_cleared = false;
 					servo_set(LOW);
+					gate_open = true;
 					printf("GATE STATUS: Open\n\r");
 					fflush(stdout);
 					led_set(ALL, false, 0);
@@ -156,12 +202,14 @@ void ttc_callback(void){
 			voltage = adc_get_pot();
 			dutycycle = (voltage * 4.5) + 4.25;
 
-			if (dutycycle <= (LOW + 0.01)){
+			if (dutycycle <= (LOW + 0.01) && (gate_open != true)){
 				servo_set(LOW);
+				gate_open = true;
 				printf("GATE STATUS: Open\n\r");
 				fflush(stdout);
-			} else if (dutycycle >= HIGH){
+			} else if (dutycycle >= HIGH && (gate_open != false)){
 				servo_set(HIGH);
+				gate_open = false;
 				printf("GATE STATUS: Closed\n\r");
 				fflush(stdout);
 			}
@@ -196,7 +244,8 @@ int main()
 
 	ttc_start();
 	change_state(TRAFFIC);
-	servo_set(LOW); // Blocks traffic
+	servo_set(LOW); // Open traffic
+	gate_open = true;
 
 	while (1){
 	}
