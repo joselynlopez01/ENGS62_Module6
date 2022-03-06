@@ -3,9 +3,9 @@
 
 static XUartPs uart1;
 static XUartPs uart0;
-//static double dutycycle = 6.5;
 
-static int update_values[30];
+static bool train_state;
+static bool maintenance_state;
 
 static int STATE;
 static u8 long_buffer[200];
@@ -47,11 +47,14 @@ void send_update(int value){
 	u.value = value;
 
 	XUartPs_Send(&uart0, (u8*) &u, sizeof(update_request_t));
-//	printf("Send update request: STATE: %d \n\r", STATE);
 }
 
-int* receive_update(void){
-	return (update_values);
+bool get_train_update(void){
+	return (train_state);
+}
+
+bool get_maintenance_update(void){
+	return (maintenance_state);
 }
 
 void set_state(int s){
@@ -71,7 +74,6 @@ static void uart0_handler(void *callBackRef, u32 event, unsigned int eventData){
 		XUartPs *uart0 = (XUartPs*)callBackRef;
 
 		XUartPs_Recv(uart0, &buffer, numBytes_requested);
-
 		if (STATE == CONFIGURE){
 			XUartPs_Send(&uart1, &buffer, numBytes_requested);
 		} else if (STATE == PING){
@@ -89,11 +91,16 @@ static void uart0_handler(void *callBackRef, u32 event, unsigned int eventData){
 			if (buffer_counter == sizeof(update_response_t)){
 				update_response_t* u = (update_response_t *) long_buffer;
 				buffer_counter = 0;
-//				printf("[UPDATE ID: %d, AVG: %d]\n\r", u->id, u->average);
-//				dutycycle = (0.045)*(u->values[12])+4.25;
-//				servo_set(dutycycle);
-				for (int i = 0; i<30; i++){
-					update_values[i] = u->values[i];
+				if ((u->values[12] == 1) && (train_state == false)){
+					train_state = true;
+				} else if ((u->values[12] == 0) && (train_state == true)){
+					train_state = false;
+				}
+
+				if ((u->values[17] == 1) && (maintenance_state == false)){
+					maintenance_state = true;
+				} else if ((u->values[17] == 0) && (maintenance_state == true)){
+					maintenance_state = false;
 				}
 			}
 		}

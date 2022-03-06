@@ -50,8 +50,6 @@ float voltage = 0;
 
 static int state;
 
-int *update_values;
-
 static void change_state(int local_state){
 	switch(local_state){
 		case TRAFFIC:
@@ -153,29 +151,74 @@ void sw_callback(u32 sw_num){
 }
 
 void ttc_callback(void){
-//	for (int i = 0; i<30; i++){
-//		update_values[i] = recieve_update();
+	send_update(0);
+//	if ((get_train_update() == true) && (train_coming != 1)){
+//		printf("Substation: Train Arriving\n\r");
+//		train_coming = 1;
+//		train_cleared = 0;
+//		change_state(TRAIN);
+//		servo_set(HIGH);
+//		gate_open = false;
+//		printf("GATE STATUS: Closed\n\r");
+//		fflush(stdout);
+//		led_set(ALL, true, 0);
+//
+//	} else if ((get_train_update() == false) && (train_coming == 1)){
+//		printf("Substation: Train Clear\n\r");
+//		train_coming = 0;
+//		train_cleared = 1;
 //	}
-	update_values = receive_update();
-	for (int i = 0; i<30; i ++){
-		printf("[%d] ", update_values[i]);
+
+	if ((get_train_update() == true) && (train_coming != 1)){
+		if (state == MAINTENANCE){
+			printf("Train Arriving\n\r");
+			fflush(stdout);
+			train_coming = true;
+			train_cleared = false;
+		} else {
+			printf("Substation: Train Arriving\n\r");
+			train_coming = 1;
+			train_cleared = 0;
+			change_state(TRAIN);
+			servo_set(HIGH);
+			gate_open = false;
+			printf("GATE STATUS: Closed\n\r");
+			fflush(stdout);
+			led_set(ALL, true, 0);
+		}
+	} else if ((get_train_update() == false) && (train_coming == 1)){
+		printf("Train Clear\n\r");
+		fflush(stdout);
+		// Wait the 10 seconds to protect humans I guess
+		train_cleared = true;
+		train_coming =  false;
 	}
 
-	if (update_values[12] == 1){
-		train_coming = true;
-		train_cleared =  false;
-		printf("Train coming wifly\n\r");
-	} else if ((train_coming = true) && (update_values[12] == 0)){
-		train_cleared =  true;
-		train_coming = false;
-		printf("Train cleared wifly\n\r");
+	if ((get_maintenance_update() == true) && (state != MAINTENANCE)){
+		printf("get_maintenance 1\n\r");
+		change_state(MAINTENANCE);
+	} else if ((get_maintenance_update() == false) && (state == MAINTENANCE)){
+		printf("get_maintenance 2\n\r");
+		printf("Exiting MAINTENANCE MODE\n\r");
+		fflush(stdout);
+		printf("train_coming: %d, train_cleared: %d\n\r", train_coming, train_cleared);
+		fflush(stdout);
+		if(train_cleared == false && train_coming == false){
+			servo_set(LOW);
+			gate_open = true;
+			printf("GATE STATUS: Open\n\r");
+			fflush(stdout);
+			change_state(TRAFFIC);
+		} else if (train_cleared == true){
+			led_set(RGBLED, false, 0);
+			blue_light = false;
+			led_set(ALL, true, 0);
+			servo_set(HIGH);
+			gate_open = false;
+			change_state(TRAIN);
+		}
 	}
-//	if (update_values[17] == 1){
-//		change_state(MAINTENANCE);
-//	} else if (train_coming = 1 && update_values[12] == 0){
-//		train_cleared =  1;
-//		train_coming = 0;
-//	}
+
 
 	switch(state){
 		case TRAFFIC:

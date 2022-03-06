@@ -17,7 +17,7 @@
 #define UPDATE 2
 #define READ 4
 
-#define ID 12
+#define ID 0
 
 typedef struct ping ping_t;
 typedef struct update_request update_request_t;
@@ -38,4 +38,5 @@ void set_state(int s);
 
 void send_ping (void);
 void send_update (int value);
-int* receive_update(void);
+bool get_train_update(void);
+bool get_maintenance_update(void);
