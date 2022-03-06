@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "platform.h"
 #include "xil_printf.h"
 #include "led.h"
@@ -10,6 +12,7 @@
 #include "servo.h"
 #include "adc.h"
 #include <stdbool.h>
+#include "wifi.h"
 
 #define LOW 4.25 //open
 #define HIGH 8.75 // closed
@@ -47,6 +50,8 @@ float voltage = 0;
 
 static int state;
 
+int *update_values;
+
 static void change_state(int local_state){
 	switch(local_state){
 		case TRAFFIC:
@@ -70,6 +75,13 @@ static void change_state(int local_state){
 
 	printf("CURRENT STATE: %d\n\r", state);
 	fflush(stdout);
+}
+
+void wifi_callback(void *buffer){
+	char * sbuff = (char*) buffer;
+	int value = atoi(sbuff);
+	send_update(value);
+	set_state(UPDATE);
 }
 
 void btn_callback(u32 btn_num){
@@ -141,6 +153,30 @@ void sw_callback(u32 sw_num){
 }
 
 void ttc_callback(void){
+//	for (int i = 0; i<30; i++){
+//		update_values[i] = recieve_update();
+//	}
+	update_values = receive_update();
+	for (int i = 0; i<30; i ++){
+		printf("[%d] ", update_values[i]);
+	}
+
+	if (update_values[12] == 1){
+		train_coming = true;
+		train_cleared =  false;
+		printf("Train coming wifly\n\r");
+	} else if ((train_coming = true) && (update_values[12] == 0)){
+		train_cleared =  true;
+		train_coming = false;
+		printf("Train cleared wifly\n\r");
+	}
+//	if (update_values[17] == 1){
+//		change_state(MAINTENANCE);
+//	} else if (train_coming = 1 && update_values[12] == 0){
+//		train_cleared =  1;
+//		train_coming = 0;
+//	}
+
 	switch(state){
 		case TRAFFIC:
 			traffic_counter++;
@@ -229,6 +265,8 @@ int main()
 	if (gic_init() == XST_SUCCESS){
 		io_btn_init(btn_callback);
 		io_sw_init(sw_callback);
+		wifi_init(wifi_callback);
+		set_state(UPDATE);
 		servo_init();
 		adc_init();
 		u32 freq = 1;
@@ -251,6 +289,10 @@ int main()
 	}
 	ttc_stop();
 	ttc_close();
+	wifi_close();
+	io_btn_close();
+	io_sw_close();
+	gic_close();
 
     cleanup_platform();
     return 0;
